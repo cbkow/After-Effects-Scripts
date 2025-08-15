@@ -1,4 +1,4 @@
-(function(thisObj) {
+﻿(function(thisObj) {
     "use strict";
     
     // Build UI
