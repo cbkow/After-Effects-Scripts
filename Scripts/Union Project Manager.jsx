@@ -1,5 +1,63 @@
 (function(thisObj) {
     "use strict";
+
+    // ---- minColor pill theme (self-contained copy; neutrals only — AE remaps custom hues) ----
+    function flatButton(parent, label, opts) {
+        opts = opts || {};
+        var b = parent.add("iconbutton", undefined, undefined, { style: "toolbutton" });
+        b.textLabel = label; b.hov = false; b.dn = false;
+        var hgt = opts.height || 24;
+        if (opts.width) { b.preferredSize = [opts.width, hgt]; b.maximumSize = [opts.width, hgt]; }
+        else { b.preferredSize.height = hgt; b.alignment = ["fill", "center"]; }
+        if (opts.tip) b.helpTip = opts.tip;
+        b.onDraw = function () {
+            var g = this.graphics, s = this.size;
+            function pill(x, y, w, h, col) {
+                g.newPath();
+                g.ellipsePath(x, y, h, h);
+                g.ellipsePath(x + w - h, y, h, h);
+                g.rectPath(x + h / 2, y, w - h, h);
+                g.fillPath(g.newBrush(g.BrushType.SOLID_COLOR, col));
+            }
+            var base = opts.primary ? [0.24, 0.40, 0.90, 1] : [0.235, 0.235, 0.235, 1];
+            if (opts.outline) {
+                var rimA = this.dn ? 0.55 : this.hov ? 0.45 : 0.32;
+                pill(0, 0, s[0], s[1], [1, 1, 1, rimA]);
+                pill(1.5, 1.5, s[0] - 3, s[1] - 3, [0.13, 0.13, 0.13, 1]);
+            } else {
+                var fill = this.dn ? [base[0] * 0.72, base[1] * 0.72, base[2] * 0.72, 1]
+                         : this.hov ? [base[0] + 0.06, base[1] + 0.06, base[2] + 0.06, 1] : base;
+                pill(0, 0, s[0], s[1], [1, 1, 1, opts.primary ? 0.25 : 0.16]);
+                pill(1, 1, s[0] - 2, s[1] - 2, fill);
+            }
+            var f = ScriptUI.newFont("dialog", opts.primary ? "BOLD" : "REGULAR", opts.fontSize || 11);
+            var ts = g.measureString(this.textLabel, f);
+            g.drawString(this.textLabel, g.newPen(g.PenType.SOLID_COLOR, [0.95, 0.95, 0.95, 1], 1),
+                         Math.max(2, (s[0] - ts.width) / 2), Math.max(0, (s[1] - ts.height) / 2 - 1), f);
+        };
+        b.addEventListener("mouseover", function () { this.hov = true;  try { this.window.update(); } catch (e) {} });
+        b.addEventListener("mouseout",  function () { this.hov = false; this.dn = false; try { this.window.update(); } catch (e) {} });
+        b.addEventListener("mousedown", function () { this.dn = true;  try { this.window.update(); } catch (e) {} });
+        b.addEventListener("mouseup",   function () { this.dn = false; try { this.window.update(); } catch (e) {} });
+        return b;
+    }
+
+    function themeHeader(parent, title, glyph) {                    // minColor section header: glyph + bold label + hairline
+        var hdr = parent.add("group"); hdr.spacing = 6; hdr.alignChildren = ["left", "center"]; hdr.alignment = ["fill", "top"];
+        var ic = hdr.add("iconbutton", undefined, undefined, { style: "toolbutton" }); ic.preferredSize = [18, 18];
+        ic.onDraw = function () { glyph(this.graphics); };
+        var st = hdr.add("statictext", undefined, title);
+        try { st.graphics.font = ScriptUI.newFont("dialog", "BOLD", 11); } catch (eH) {}
+        var ln = hdr.add("panel"); ln.alignment = ["fill", "center"]; ln.preferredSize.height = 2; ln.minimumSize.width = 20;
+        return hdr;
+    }
+
+    function folderGlyph(g) {                                       // flat folder, matching the minColor icon family
+        var p = g.newPen(g.PenType.SOLID_COLOR, [0.72, 0.72, 0.72, 1], 1.4);
+        g.newPath(); g.moveTo(3, 6.5); g.lineTo(3, 14); g.lineTo(15, 14); g.lineTo(15, 7);
+        g.lineTo(9.5, 7); g.lineTo(8, 5); g.lineTo(3, 5); g.closePath(); g.strokePath(p);
+        g.newPath(); g.rectPath(5, 9.5, 5, 1.6); g.fillPath(g.newBrush(g.BrushType.SOLID_COLOR, [0.72, 0.72, 0.72, 1]));
+    }
     
     var scriptName = "Union Project Manager";
     
@@ -166,26 +224,18 @@
             panel.spacing = 10;
             panel.margins = 15;
             
-            // Header
-            var header = panel.add("statictext", undefined, "UNION PROJECT MANAGER");
-            header.graphics.font = ScriptUI.newFont("Arial", "Bold", 14);
-            header.alignment = "center";
-            
-            panel.add("panel");
+            themeHeader(panel, "Union Project Manager", folderGlyph);
             
             // Main action button
-            var reduceAndSetupBtn = panel.add("button", undefined, "🔄 Reduce + Apply Template");
-            reduceAndSetupBtn.preferredSize.height = 30;
+            var reduceAndSetupBtn = flatButton(panel, "Reduce + Apply Template", { primary: true, height: 30 });
             reduceAndSetupBtn.helpTip = "Reduces project and applies Union folder template";      
             
             // Template only button
-            var applyTemplateBtn = panel.add("button", undefined, "📁 Apply Union Template Only");
-            applyTemplateBtn.preferredSize.height = 30;
+            var applyTemplateBtn = flatButton(panel, "Apply Union Template Only", { height: 30 });
             applyTemplateBtn.helpTip = "Create Union folder structure";
             
             // Import and merge button
-            var importMergeBtn = panel.add("button", undefined, "📥 Import & Merge Project");
-            importMergeBtn.preferredSize.height = 30;
+            var importMergeBtn = flatButton(panel, "Import & Merge Project", { height: 30 });
             importMergeBtn.helpTip = "Import project, merge with same structure, and consolidate footage";
             
             // Event Handlers

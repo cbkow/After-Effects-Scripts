@@ -1,5 +1,46 @@
-﻿(function(thisObj) {
+(function(thisObj) {
     "use strict";
+
+    // ---- minColor pill theme (self-contained copy; neutrals only — AE remaps custom hues) ----
+    function flatButton(parent, label, opts) {
+        opts = opts || {};
+        var b = parent.add("iconbutton", undefined, undefined, { style: "toolbutton" });
+        b.textLabel = label; b.hov = false; b.dn = false;
+        var hgt = opts.height || 24;
+        if (opts.width) { b.preferredSize = [opts.width, hgt]; b.maximumSize = [opts.width, hgt]; }
+        else { b.preferredSize.height = hgt; b.alignment = ["fill", "center"]; }
+        if (opts.tip) b.helpTip = opts.tip;
+        b.onDraw = function () {
+            var g = this.graphics, s = this.size;
+            function pill(x, y, w, h, col) {
+                g.newPath();
+                g.ellipsePath(x, y, h, h);
+                g.ellipsePath(x + w - h, y, h, h);
+                g.rectPath(x + h / 2, y, w - h, h);
+                g.fillPath(g.newBrush(g.BrushType.SOLID_COLOR, col));
+            }
+            var base = opts.primary ? [0.24, 0.40, 0.90, 1] : [0.235, 0.235, 0.235, 1];
+            if (opts.outline) {
+                var rimA = this.dn ? 0.55 : this.hov ? 0.45 : 0.32;
+                pill(0, 0, s[0], s[1], [1, 1, 1, rimA]);
+                pill(1.5, 1.5, s[0] - 3, s[1] - 3, [0.13, 0.13, 0.13, 1]);
+            } else {
+                var fill = this.dn ? [base[0] * 0.72, base[1] * 0.72, base[2] * 0.72, 1]
+                         : this.hov ? [base[0] + 0.06, base[1] + 0.06, base[2] + 0.06, 1] : base;
+                pill(0, 0, s[0], s[1], [1, 1, 1, opts.primary ? 0.25 : 0.16]);
+                pill(1, 1, s[0] - 2, s[1] - 2, fill);
+            }
+            var f = ScriptUI.newFont("dialog", opts.primary ? "BOLD" : "REGULAR", opts.fontSize || 11);
+            var ts = g.measureString(this.textLabel, f);
+            g.drawString(this.textLabel, g.newPen(g.PenType.SOLID_COLOR, [0.95, 0.95, 0.95, 1], 1),
+                         Math.max(2, (s[0] - ts.width) / 2), Math.max(0, (s[1] - ts.height) / 2 - 1), f);
+        };
+        b.addEventListener("mouseover", function () { this.hov = true;  try { this.window.update(); } catch (e) {} });
+        b.addEventListener("mouseout",  function () { this.hov = false; this.dn = false; try { this.window.update(); } catch (e) {} });
+        b.addEventListener("mousedown", function () { this.dn = true;  try { this.window.update(); } catch (e) {} });
+        b.addEventListener("mouseup",   function () { this.dn = false; try { this.window.update(); } catch (e) {} });
+        return b;
+    }
     
     // Build UI
     function buildUI(thisObj) {
@@ -11,13 +52,48 @@
             panel.spacing = 10;
             panel.margins = 10;
             
-            // Create tabbed panel
-            var tabbedPanel = panel.add("tabbedpanel");
-            tabbedPanel.alignment = ["fill", "fill"];
-            tabbedPanel.alignChildren = ["fill", "fill"];
+            // Header-style tab bar: glyph + label, selected = bold + underline (tabs navigate;
+            // pills act — deliberately different grammar; neutrals only per the hue gotcha)
+            function tabItem(parent, label, glyph, width) {
+                var b = parent.add("iconbutton", undefined, undefined, { style: "toolbutton" });
+                b.textLabel = label; b.hov = false; b.sel = false;
+                b.preferredSize = [width, 26]; b.maximumSize = [width, 26];
+                b.onDraw = function () {
+                    var g = this.graphics, s = this.size;
+                    if (this.hov && !this.sel) { g.newPath(); g.rectPath(0, 0, s[0], s[1]); g.fillPath(g.newBrush(g.BrushType.SOLID_COLOR, [1, 1, 1, 0.05])); }
+                    var lum = this.sel ? 0.95 : 0.60;
+                    glyph(g, lum);
+                    var f = ScriptUI.newFont("dialog", this.sel ? "BOLD" : "REGULAR", 11);
+                    var ts = g.measureString(this.textLabel, f);
+                    g.drawString(this.textLabel, g.newPen(g.PenType.SOLID_COLOR, [lum, lum, lum, 1], 1), 22, Math.max(0, (s[1] - ts.height) / 2 - 2), f);
+                    if (this.sel) { g.newPath(); g.rectPath(0, s[1] - 2, s[0], 2); g.fillPath(g.newBrush(g.BrushType.SOLID_COLOR, [1, 1, 1, 0.85])); }
+                    else if (this.hov) { g.newPath(); g.rectPath(0, s[1] - 2, s[0], 2); g.fillPath(g.newBrush(g.BrushType.SOLID_COLOR, [1, 1, 1, 0.20])); }
+                };
+                b.addEventListener("mouseover", function () { this.hov = true;  try { this.window.update(); } catch (e) {} });
+                b.addEventListener("mouseout",  function () { this.hov = false; try { this.window.update(); } catch (e) {} });
+                return b;
+            }
+            function frameGlyph(g, lum) {                            /* tiny filmstrip */
+                var pn = g.newPen(g.PenType.SOLID_COLOR, [lum, lum, lum, 1], 1.2);
+                g.newPath(); g.rectPath(2, 7, 14, 10); g.strokePath(pn);
+                var br = g.newBrush(g.BrushType.SOLID_COLOR, [lum, lum, lum, 1]);
+                g.newPath(); g.rectPath(4.5, 9, 3.5, 6); g.fillPath(br);
+                g.newPath(); g.rectPath(10, 9, 3.5, 6); g.fillPath(br);
+            }
+            function calcGlyph(g, lum) {                             /* tiny calculator */
+                var pn = g.newPen(g.PenType.SOLID_COLOR, [lum, lum, lum, 1], 1.2);
+                g.newPath(); g.rectPath(3, 6, 12, 12); g.strokePath(pn);
+                var br = g.newBrush(g.BrushType.SOLID_COLOR, [lum, lum, lum, 1]);
+                g.newPath(); g.rectPath(5, 8, 8, 2.2); g.fillPath(br);
+                for (var gy = 0; gy < 2; gy++) for (var gx = 0; gx < 3; gx++) { g.newPath(); g.rectPath(5 + gx * 3.1, 12 + gy * 2.8, 1.8, 1.6); g.fillPath(br); }
+            }
+            var tabBar = panel.add("group"); tabBar.spacing = 10; tabBar.alignment = ["fill", "top"]; tabBar.alignChildren = ["left", "center"];
+            var tabFrameBtn = tabItem(tabBar, "Frame Calculator", frameGlyph, 130);
+            var tabCalcBtn = tabItem(tabBar, "Calculator", calcGlyph, 95);
+            var stack = panel.add("group"); stack.orientation = "stack"; stack.alignment = ["fill", "fill"]; stack.alignChildren = ["fill", "fill"];
             
-            // Frame Calculator Tab
-            var frameTab = tabbedPanel.add("tab", undefined, "Frame Calculator");
+            // Frame Calculator "tab"
+            var frameTab = stack.add("group");
             frameTab.orientation = "column";
             frameTab.alignChildren = "fill";
             frameTab.spacing = 5;
@@ -45,16 +121,25 @@
             var compDurationRadio = optionsGroup.add("radiobutton", undefined, "Full Composition Duration");
             
             // Set default selection
-            compDurationRadio.value = true;
+            workAreaRadio.value = true;
             
-            var calculateBtn = frameTab.add("button", undefined, "Calculate Frames");
+            var calculateBtn = flatButton(frameTab, "Calculate Frames", { primary: true, height: 26 });
             
-            // Calculator Tab
-            var calcTab = tabbedPanel.add("tab", undefined, "Calculator");
+            // Calculator "tab"
+            var calcTab = stack.add("group");
             calcTab.orientation = "column";
             calcTab.alignChildren = "fill";
             calcTab.spacing = 5;
             calcTab.margins = 10;
+            
+            function selectTab(which) {                              // selected = bold + underline
+                tabFrameBtn.sel = (which === 0); tabCalcBtn.sel = (which === 1);
+                frameTab.visible = (which === 0); calcTab.visible = (which === 1);
+                try { panel.layout.layout(true); } catch (eL) {}
+                try { tabFrameBtn.window.update(); } catch (eU) {}
+            }
+            tabFrameBtn.onClick = function () { selectTab(0); };
+            tabCalcBtn.onClick = function () { selectTab(1); };
             
             // Calculator display - now with selectable text and custom graphics
             var display = calcTab.add("edittext", undefined, "0", {readonly: true});
@@ -90,18 +175,13 @@
                 
                 for (var j = 0; j < buttons[i].length; j++) {
                     var btnText = buttons[i][j];
-                    var btn = row.add("button", undefined, btnText);
-                    
-                    if (btnText === "0") {
-                        btn.alignment = ["fill", "fill"];
-                        btn.preferredSize.width = 100;
-                    } else {
-                        btn.alignment = ["fill", "fill"];
-                        btn.preferredSize.width = 45;
-                    }
-                    btn.preferredSize.height = 35;
-                    
-                    // Add click handler
+                    var isOp = "\u00f7\u00d7\u2212+=".indexOf(btnText) >= 0;   /* operators + '=' get the accent */
+                    var btn = flatButton(row, btnText, {
+                        width: btnText === "0" ? 100 : 45,
+                        height: 35, fontSize: 13,
+                        primary: isOp,
+                        outline: btnText === "C"                     /* C is a removal: outline grammar */
+                    });
                     btn.onClick = createCalculatorHandler(btnText);
                 }
             }
@@ -270,6 +350,8 @@
                     return null;
                 }
             }
+            
+            selectTab(0);
             
             // Layout
             panel.layout.layout(true);
