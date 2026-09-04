@@ -19,7 +19,7 @@
                 g.rectPath(x + h / 2, y, w - h, h);
                 g.fillPath(g.newBrush(g.BrushType.SOLID_COLOR, col));
             }
-            var base = opts.primary ? [0.24, 0.40, 0.90, 1] : [0.235, 0.235, 0.235, 1];
+            var base = opts.primary ? [0.00784, 0.39608, 0.86275, 1] : [0.235, 0.235, 0.235, 1];
             if (opts.outline) {
                 var rimA = this.dn ? 0.55 : this.hov ? 0.45 : 0.32;
                 pill(0, 0, s[0], s[1], [1, 1, 1, rimA]);
@@ -27,12 +27,12 @@
             } else {
                 var fill = this.dn ? [base[0] * 0.72, base[1] * 0.72, base[2] * 0.72, 1]
                          : this.hov ? [base[0] + 0.06, base[1] + 0.06, base[2] + 0.06, 1] : base;
-                pill(0, 0, s[0], s[1], [1, 1, 1, opts.primary ? 0.25 : 0.16]);
+                pill(0, 0, s[0], s[1], opts.primary ? [base[0], base[1], base[2], 1] : [1, 1, 1, 0.16]);
                 pill(1, 1, s[0] - 2, s[1] - 2, fill);
             }
             var f = ScriptUI.newFont("dialog", opts.primary ? "BOLD" : "REGULAR", opts.fontSize || 11);
             var ts = g.measureString(this.textLabel, f);
-            g.drawString(this.textLabel, g.newPen(g.PenType.SOLID_COLOR, [0.95, 0.95, 0.95, 1], 1),
+            g.drawString(this.textLabel, g.newPen(g.PenType.SOLID_COLOR, [1, 1, 1, 1], 1),
                          Math.max(2, (s[0] - ts.width) / 2), Math.max(0, (s[1] - ts.height) / 2 - 1), f);
         };
         b.addEventListener("mouseover", function () { this.hov = true;  try { this.window.update(); } catch (e) {} });
