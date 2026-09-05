@@ -160,7 +160,8 @@
                 display: "0",
                 previousValue: 0,
                 operation: null,
-                waitingForOperand: false
+                waitingForOperand: false,
+                entryCleared: false      // true right after an operator: field is blanked for the next entry
             };
             
             // Calculator button layout
@@ -203,7 +204,7 @@
             
             // Update display function
             function updateDisplay() {
-                display.text = calcState.display;
+                display.text = calcState.entryCleared ? "" : calcState.display;
             }
 
             // Typed / pasted input (native Cmd/Ctrl+V).
@@ -220,18 +221,72 @@
             }
 
             // Live filter: strips letters as they are typed or pasted, so the field never shows them.
+            // Also mirrors the keypad's "start a fresh operand" rule: after an operator or "=" the
+            // field still shows the previous value, so the first keystroke must REPLACE it, not
+            // append to it (typing 2 + 2 must read "2", not "22"). Same for a leading "0".
             display.onChanging = function () {
                 var raw = String(this.text);
                 if (/[:;]/.test(raw)) { this.text = calcState.display; return; }   // timecode: not a number, keep last good
+                // Fallback for platforms where keydown doesn't block the key: an operator character
+                // that lands in the field is treated as that operator. A "-" counts only when it
+                // follows a digit or ".", so a leading minus (pasted "-3") stays a sign.
+                var opAt = -1;
+                for (var k = 0; k < raw.length && opAt < 0; k++) {
+                    var ch = raw.charAt(k);
+                    if ("+*/=".indexOf(ch) >= 0) opAt = k;
+                    else if (ch === "-" && k > 0 && /[0-9.]/.test(raw.charAt(k - 1))) opAt = k;
+                }
+                if (opAt >= 0) {
+                    this.text = raw.slice(0, opAt);                           // keep what came before the operator
+                    createCalculatorHandler(keyOps[raw.charAt(opAt)])();
+                    return;
+                }
                 var clean = sanitize(raw);
+                if (calcState.entryCleared) {                                  // field was blank: whatever arrived is the new operand
+                    if (clean !== "") { calcState.entryCleared = false; calcState.waitingForOperand = false; }
+                } else if (calcState.waitingForOperand && clean !== calcState.display) {
+                    var at = clean.indexOf(calcState.display);                 // after "=": drop the stale result, keep what was typed
+                    if (at >= 0) clean = clean.slice(0, at) + clean.slice(at + calcState.display.length);
+                    calcState.waitingForOperand = false;
+                } else if (calcState.display === "0") {
+                    clean = clean.replace(/^0(?=\d)/, "");                    // "05" -> "5" (keep "0.")
+                }
                 if (clean !== raw) this.text = clean;
             };
+
+            // Keyboard operators while the field is focused: + - * / (main row or numpad), Enter or
+            // "=" for equals, Esc for clear. Routed through the same handler the keypad uses.
+            // The typed character is blocked; if a platform inserts it anyway, sanitize() strips it.
+            var keyOps = { "+": "+", "-": "\u2212", "*": "\u00d7", "/": "\u00f7", "=": "=", "\r": "=", "\n": "=", "\u0003": "=" };
+            var keyNames = {
+                Add: "+", Subtract: "\u2212", Multiply: "\u00d7", Divide: "\u00f7",
+                NumpadAdd: "+", NumpadSubtract: "\u2212", NumpadMultiply: "\u00d7", NumpadDivide: "\u00f7",
+                NumPadAdd: "+", NumPadSubtract: "\u2212", NumPadMultiply: "\u00d7", NumPadDivide: "\u00f7",
+                KP_Add: "+", KP_Subtract: "\u2212", KP_Multiply: "\u00d7", KP_Divide: "\u00f7", KP_Enter: "=",
+                Plus: "+", Minus: "\u2212", Asterisk: "\u00d7", Slash: "\u00f7", Equal: "=",
+                Enter: "=", Return: "=", NumpadEnter: "=", NumPadEnter: "=", Escape: "C"
+            };
+            // keyIdentifier is "U+XXXX" on macOS (numpad "+" -> "U+002B"); turn it back into a char.
+            function charFromIdentifier(id) {
+                var m = /^U\+([0-9A-Fa-f]{4,6})$/.exec(String(id || ""));
+                return m ? String.fromCharCode(parseInt(m[1], 16)) : "";
+            }
+            function opFromKeyEvent(ev) {
+                return keyOps[ev.character] || keyNames[ev.keyName] || keyOps[charFromIdentifier(ev.keyIdentifier)] || null;
+            }
+            display.addEventListener("keydown", function (ev) {
+                var op = opFromKeyEvent(ev);
+                if (!op) return;                                            // digits, ".", Backspace, arrows: native
+                try { ev.preventDefault(); } catch (eP) {}
+                createCalculatorHandler(op)();
+            });
 
             // Adopt the field as the current operand. Called on Enter/blur (onChange) and by every
             // keypad button before it acts, so typed text is never left out of sync with calcState.
             function syncFromDisplay() {
                 var raw = String(display.text);
                 if (raw === calcState.display) return;                     // nothing new
+                if (raw === "" && calcState.entryCleared) return;          // still blank after an operator: nothing new
                 var v = parseFloat(sanitize(raw));
                 if (isNaN(v)) { display.text = calcState.display; return; }   // empty/junk: keep last good
                 calcState.display = v.toString();
@@ -242,6 +297,7 @@
             
             // Calculator logic
             function handleCalculatorInput(input) {
+                calcState.entryCleared = false;                            // only an operator (below) blanks the field
                 switch (input) {
                     case "C":
                         calcState.display = "0";
@@ -282,6 +338,7 @@
                         calcState.previousValue = parseFloat(calcState.display);
                         calcState.operation = input;
                         calcState.waitingForOperand = true;
+                        calcState.entryCleared = true;                     // blank the field for the next number / paste
                         break;
                         
                     case ".":
