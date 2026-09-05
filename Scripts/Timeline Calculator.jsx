@@ -146,8 +146,9 @@
             tabFrameBtn.onClick = function () { selectTab(0); };
             tabCalcBtn.onClick = function () { selectTab(1); };
             
-            // Calculator display - now with selectable text and custom graphics
-            var display = calcTab.add("edittext", undefined, "0", {readonly: true});
+            // Calculator display - editable so it accepts typing AND clipboard paste (native
+            // Cmd/Ctrl+V); the keypad still drives it. onChange (below) validates entry to a number.
+            var display = calcTab.add("edittext", undefined, "0");
             display.preferredSize.height = 30;
             display.alignment = ["fill", "top"];
             
@@ -203,6 +204,16 @@
             function updateDisplay() {
                 display.text = calcState.display;
             }
+
+            // Typed / pasted input (native Cmd/Ctrl+V): validate to a number and adopt it as the
+            // current operand. Commas are tolerated; anything non-numeric reverts to the last value.
+            display.onChange = function () {
+                var v = parseFloat(String(this.text).replace(/,/g, ""));
+                if (isNaN(v)) { this.text = calcState.display; return; }   // reject junk, keep last good
+                calcState.display = v.toString();
+                calcState.waitingForOperand = false;                       // a pasted value is a fresh operand
+                this.text = calcState.display;                             // normalize the field
+            };
             
             // Calculator logic
             function handleCalculatorInput(input) {
