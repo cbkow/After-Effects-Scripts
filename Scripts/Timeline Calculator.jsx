@@ -195,6 +195,7 @@
             // Calculator button handler factory
             function createCalculatorHandler(value) {
                 return function() {
+                    syncFromDisplay();          // adopt anything typed/pasted before the key acts
                     handleCalculatorInput(value);
                     updateDisplay();
                 };
@@ -205,15 +206,39 @@
                 display.text = calcState.display;
             }
 
-            // Typed / pasted input (native Cmd/Ctrl+V): validate to a number and adopt it as the
-            // current operand. Commas are tolerated; anything non-numeric reverts to the last value.
-            display.onChange = function () {
-                var v = parseFloat(String(this.text).replace(/,/g, ""));
-                if (isNaN(v)) { this.text = calcState.display; return; }   // reject junk, keep last good
+            // Typed / pasted input (native Cmd/Ctrl+V).
+            // sanitize(): keep only digits, one leading "-", and the first "."; everything else
+            // (letters, commas, spaces, "+", etc.) is dropped. Returns "" if nothing numeric is left.
+            function sanitize(raw) {
+                var t = String(raw);
+                var neg = /^\s*-/.test(t);
+                t = t.replace(/[^0-9.]/g, "");
+                var dot = t.indexOf(".");
+                if (dot >= 0) t = t.slice(0, dot + 1) + t.slice(dot + 1).replace(/\./g, "");
+                if (t === "" || t === ".") return "";
+                return (neg ? "-" : "") + t;
+            }
+
+            // Live filter: strips letters as they are typed or pasted, so the field never shows them.
+            display.onChanging = function () {
+                var raw = String(this.text);
+                if (/[:;]/.test(raw)) { this.text = calcState.display; return; }   // timecode: not a number, keep last good
+                var clean = sanitize(raw);
+                if (clean !== raw) this.text = clean;
+            };
+
+            // Adopt the field as the current operand. Called on Enter/blur (onChange) and by every
+            // keypad button before it acts, so typed text is never left out of sync with calcState.
+            function syncFromDisplay() {
+                var raw = String(display.text);
+                if (raw === calcState.display) return;                     // nothing new
+                var v = parseFloat(sanitize(raw));
+                if (isNaN(v)) { display.text = calcState.display; return; }   // empty/junk: keep last good
                 calcState.display = v.toString();
                 calcState.waitingForOperand = false;                       // a pasted value is a fresh operand
-                this.text = calcState.display;                             // normalize the field
-            };
+                display.text = calcState.display;                          // normalize the field
+            }
+            display.onChange = syncFromDisplay;
             
             // Calculator logic
             function handleCalculatorInput(input) {
